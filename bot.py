@@ -2,15 +2,16 @@ import logging
 
 from telegram.ext import Updater
 
+import settings
+
 from handlers import (
     start_handler,
-    help_admin_handler,
-    help_user_handler,
+    help_handler,
     unknown_handler
 )
 
 updater = Updater(
-    token='5517306679:AAGPdtsgpGKJjCSRJGKHtXQHBh7tBH_ryw0',
+    token=settings.BOT_TOKEN,
     use_context=True
 )
 dispatcher = updater.dispatcher
@@ -21,9 +22,8 @@ logging.basicConfig(
 )
 
 dispatcher.add_handler(start_handler)
-dispatcher.add_handler(help_admin_handler)
-dispatcher.add_handler(help_user_handler)
-# unknow if it does not match any command
+dispatcher.add_handler(help_handler)
+# if no handlers are invoked, use unknown_handler
 dispatcher.add_handler(unknown_handler)
 
 updater.start_polling()

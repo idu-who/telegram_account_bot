@@ -1,13 +1,8 @@
-admin_user_id = 713488263
+import os
 
-user_menu = r"""Here's a list of available commands:
+from dotenv import load_dotenv
 
-/help \- view this help menu\."""
+load_dotenv()
 
-admin_menu = user_menu + r"""
-
-*Admin commands:*
-/adduser \- add a new user\.
-/removeuser \- remove an existing user\.
-/searchusers \- search existing users by name\.
-"""
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CONNECTION_STRING = os.getenv('CONNECTION_STRING')
