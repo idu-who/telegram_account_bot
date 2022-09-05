@@ -8,7 +8,8 @@ from db_operations import (
 
 class AuthorizedFilter(UpdateFilter):
     def filter(self, update):
-        user = update.message.from_user
+        message = update.message or update.edited_message
+        user = message.from_user
         return user_has_auth(user)
 
 

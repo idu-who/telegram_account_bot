@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 from dotenv import load_dotenv
 
@@ -7,10 +8,11 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CONNECTION_STRING = os.getenv('CONNECTION_STRING')
 DEFAULT_LIMIT = 10
+BOT_FILES_PATH = pathlib.Path('./bot_files')
 
 
 class Services:
-    SERVICES_FILE_NAME = './files/services.txt'
+    SERVICES_FILE_NAME = BOT_FILES_PATH / 'services.txt'
 
     @classmethod
     def get(cls):

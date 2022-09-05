@@ -15,7 +15,8 @@ from handlers import (
     remove_user_handler,
     set_limits_conversation_handler,
     add_service_handler,
-    remove_service_handler
+    remove_service_handler,
+    upload_handler
 )
 
 updater = Updater(
@@ -38,10 +39,11 @@ dispatcher.add_handler(remove_user_handler)
 dispatcher.add_handler(set_limits_conversation_handler)
 dispatcher.add_handler(add_service_handler)
 dispatcher.add_handler(remove_service_handler)
+dispatcher.add_handler(upload_handler)
 # if no handlers are invoked for authorized user use unknown_handler
 # and for unauthorized use unauthorized_handler
 dispatcher.add_handler(unknown_handler)
 dispatcher.add_handler(unauthorized_handler)
 
 updater.start_polling()
-updater.idle()
+# updater.idle()

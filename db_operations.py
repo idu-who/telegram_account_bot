@@ -1,3 +1,4 @@
+import credential_parsers
 import settings
 from mongo_client import client
 
@@ -67,3 +68,21 @@ def get_or_create_limit(user_document):
         limits.insert_one(limit_document)
 
     return limit_document
+
+
+def save_credentials_db(service, file_path, parser, *args):
+    print('file_path', file_path, 'parser', parser, 'args', args)
+    credentials_list = []
+    with open(file_path) as credentials_file:
+        credentials_list = credentials_file.readlines()
+
+    Parser = getattr(credential_parsers, parser or 'BaseParser')
+    credentials_documents = [
+        {
+            'service': service,
+            'credential_data': Parser.parse(credential, *args)
+        }
+        for credential in credentials_list
+    ]
+    credentials = client.bot.credentials
+    credentials.insert_many(credentials_documents)

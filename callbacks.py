@@ -14,13 +14,15 @@ from db_operations import (
     is_admin,
     user_exists_by_telegram_user_id,
     user_exists_by_username,
-    get_or_create_limit
+    get_or_create_limit,
+    save_credentials_db
 )
 from mongo_client import client
 from utils import (
     is_valid_username,
     is_valid_service_name,
-    readable_service_name
+    readable_service_name,
+    save_credentials_file,
 )
 
 
@@ -43,10 +45,13 @@ def help_menu(update: Update, context: CallbackContext):
     if is_admin(update.message.from_user.id):
         menu_text += ("\n\n*Admin Commands:*\n"
                       "/adduser \<username\> \- add a new user\.\n"
-                      "/removeuser \<username\> \- remove an existing user\.\n"
+                      "/removeuser \<username\> \- remove a user\.\n"
                       "/setlimits \<username\> \- set limits for a user\.\n"
                       "/addservice \<service\> \- add a new service\.\n"
-                      "/removeservice \<service\> \- remove an existing service\.")
+                      "/removeservice \<service\> \- remove a service\.\n"
+                      "/upload \<service\> \[\<parser\> \[\<args\>\.\.\.\]\]"
+                      " \- upload a credential file with this command as"
+                      " caption\.")
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -318,6 +323,44 @@ def remove_service(update: Update, context: CallbackContext):
     context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=remove_service_response
+    )
+
+
+def upload(update: Update, context: CallbackContext):
+    """For storing an uploaded file"""
+    caption_args = update.message.caption.split(' ')[1:]
+    if caption_args:
+        service = caption_args[0].lower()
+
+        if len(caption_args) > 1:
+            parser = caption_args[1]
+            parser_args = caption_args[2:]
+        else:
+            parser, parser_args = None, []
+
+        if is_valid_service_name(service):
+            if service in settings.Services.get():
+                file_path = save_credentials_file(
+                    service, update.message.document
+                )
+                try:
+                    save_credentials_db(
+                        service, file_path,
+                        parser, *parser_args
+                    )
+                    upload_response = f'File uploaded for service {service} .'
+                except Exception as e:
+                    upload_response = f'ERROR: {e}'
+            else:
+                upload_response = (f'Service with name {service} does'
+                                   ' not exist.')
+        else:
+            upload_response = f'{service} is not a valid service name.'
+    else:
+        upload_response = '/upload requires a service name.'
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=upload_response
     )
 
 
