@@ -1,22 +1,22 @@
 import logging
 
-from telegram.ext import (
-    Updater,
-    PicklePersistence
-)
+from telegram.ext import Updater
 
 import settings
 
 from handlers import (
-    unauthorized_handler,
     start_handler,
     help_handler,
+    services_handler,
+    show_usage_handler,
     unknown_handler,
+    unauthorized_handler,
     add_user_handler,
-    remove_user_handler
+    remove_user_handler,
+    set_limits_conversation_handler,
+    add_service_handler,
+    remove_service_handler
 )
-
-pickle_persistence = PicklePersistence(filename='persistence_file')
 
 updater = Updater(
     token=settings.BOT_TOKEN,
@@ -31,11 +31,17 @@ logging.basicConfig(
 
 dispatcher.add_handler(start_handler)
 dispatcher.add_handler(help_handler)
+dispatcher.add_handler(services_handler)
+dispatcher.add_handler(show_usage_handler)
 dispatcher.add_handler(add_user_handler)
 dispatcher.add_handler(remove_user_handler)
+dispatcher.add_handler(set_limits_conversation_handler)
+dispatcher.add_handler(add_service_handler)
+dispatcher.add_handler(remove_service_handler)
 # if no handlers are invoked for authorized user use unknown_handler
 # and for unauthorized use unauthorized_handler
 dispatcher.add_handler(unknown_handler)
 dispatcher.add_handler(unauthorized_handler)
 
 updater.start_polling()
+updater.idle()
