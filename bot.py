@@ -9,6 +9,7 @@ from handlers import (
     help_handler,
     services_handler,
     show_usage_handler,
+    fetch_handler,
     unknown_handler,
     unauthorized_handler,
     add_user_handler,
@@ -34,6 +35,7 @@ dispatcher.add_handler(start_handler)
 dispatcher.add_handler(help_handler)
 dispatcher.add_handler(services_handler)
 dispatcher.add_handler(show_usage_handler)
+dispatcher.add_handler(fetch_handler)
 dispatcher.add_handler(add_user_handler)
 dispatcher.add_handler(remove_user_handler)
 dispatcher.add_handler(set_limits_conversation_handler)

@@ -15,7 +15,8 @@ from db_operations import (
     user_exists_by_telegram_user_id,
     user_exists_by_username,
     get_or_create_limit,
-    save_credentials_db
+    save_credentials_db,
+    get_or_update_credentials_used
 )
 from mongo_client import client
 from utils import (
@@ -40,7 +41,9 @@ def help_menu(update: Update, context: CallbackContext):
     menu_text = ("Here's a list of available commands:\n"
                  "/help \- view this help menu\.\n"
                  "/services \- list all services\.\n"
-                 "/showusage \- show service usage and limit\.")
+                 "/showusage \- show service usage and limit\.\n"
+                 "/fetch \<service\> \[\<number\-of\-results\>\] \- fetch "
+                 "credentials for a service\.")
 
     if is_admin(update.message.from_user.id):
         menu_text += ("\n\n*Admin Commands:*\n"
@@ -92,6 +95,73 @@ def show_usage(update: Update, context: CallbackContext):
         chat_id=update.effective_chat.id,
         text=usage_text,
         parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+
+def fetch_credentials(update: Update, context: CallbackContext):
+    """For fetching service credentials."""
+    fetch_creds_response = []
+    if context.args:
+        service = context.args[0].lower()
+
+        if service in settings.Services.get():
+            fetch_creds_response = [f'{service} is not a service.']
+        if len(context.args) > 1:
+            num_creds = context.args[1]
+            if not(num_creds.isdigit() and int(num_creds) > 0):
+                fetch_creds_response += [f'{num_creds} is not a valid value'
+                                         ' for number of credentials.']
+            else:
+                num_creds = int(num_creds)
+        else:
+            num_creds = 1
+
+        if not fetch_creds_response:
+            user = update.message.from_user
+            user_document = user_exists_by_telegram_user_id(user.id)
+            credentials_used = get_or_update_credentials_used(user_document)
+
+            if num_creds <= credentials_used[service]:
+                credentials = client.bot.credentials
+                fetched_creds = credentials.find(
+                    {'used_by': None},
+                    limit=num_creds
+                )
+                print('creds', list(fetched_creds))
+
+                credentials.update_many(
+                    {
+                        '_id': {'$in': [
+                            cred['_id'] for cred in fetched_creds
+                        ]}
+                    },
+                    {
+                        '$set': {
+                            'used_by': user_document['_id']
+                        }
+                    }
+                )
+                fetch_creds_response = [
+                    credential['credential_data']
+                    for credential in fetched_creds
+                ]
+
+                users = client.bot.users
+                updated_creds = credentials_used
+                updated_creds[service] -= num_creds
+                users.update_one(
+                    {'_id': user_document['_id']},
+                    {
+                        '$set': {
+                            'credentials_used': updated_creds
+                        }
+                    }
+                )
+    else:
+        fetch_creds_response = ['/fetch requires a service name.']
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text='\n'.join(fetch_creds_response)
     )
 
 

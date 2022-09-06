@@ -86,3 +86,22 @@ def save_credentials_db(service, file_path, parser, *args):
     ]
     credentials = client.bot.credentials
     credentials.insert_many(credentials_documents)
+
+
+def get_or_update_credentials_used(user_document):
+    credentials_used = user_document.get('credentials_used')
+    if credentials_used:
+        return credentials_used
+    else:
+        limit_document = get_or_create_limit(user_document)
+        del limit_document['_id']
+        users = client.bot.users
+        users.update_one(
+            {'_id': user_document['_id']},
+            {
+                '$set': {
+                    'credentials_used': limit_document
+                }
+            }
+        )
+        return limit_document

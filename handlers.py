@@ -12,6 +12,7 @@ from callbacks import (
     help_menu,
     services,
     show_usage,
+    fetch_credentials,
     unknown,
     unauthorized,
     add_user,
@@ -47,6 +48,11 @@ services_handler = CommandHandler(
 show_usage_handler = CommandHandler(
     'showusage',
     show_usage,
+    filters=authorized_message_filter
+)
+fetch_handler = CommandHandler(
+    'fetch',
+    fetch_credentials,
     filters=authorized_message_filter
 )
 cancel_handler = CommandHandler(
