@@ -4,41 +4,48 @@ from telegram.ext import Updater
 
 import settings
 
+from callbacks import error_callback
 from handlers import (
     start_handler,
     help_handler,
     services_handler,
-    show_usage_handler,
+    usage_handler,
     fetch_handler,
     unknown_handler,
     unauthorized_handler,
     add_user_handler,
     remove_user_handler,
-    set_limits_conversation_handler,
+    edit_limit_handler,
     add_service_handler,
     remove_service_handler,
     upload_handler
 )
+from log_formatters import TzAwareFormatter
 
 updater = Updater(
     token=settings.BOT_TOKEN,
     use_context=True
 )
 dispatcher = updater.dispatcher
+dispatcher.add_error_handler(error_callback)
 
+file_handler = logging.FileHandler(settings.LOGS_FILE_NAME)
+file_handler.setFormatter(TzAwareFormatter(
+    '\n%(asctime)s - %(filename)s:%(funcName)s:%(lineno)d'
+    ' - %(name)s - %(levelname)s - %(message)s'
+))
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    handlers=[file_handler]
 )
 
 dispatcher.add_handler(start_handler)
 dispatcher.add_handler(help_handler)
 dispatcher.add_handler(services_handler)
-dispatcher.add_handler(show_usage_handler)
+dispatcher.add_handler(usage_handler)
 dispatcher.add_handler(fetch_handler)
 dispatcher.add_handler(add_user_handler)
 dispatcher.add_handler(remove_user_handler)
-dispatcher.add_handler(set_limits_conversation_handler)
+dispatcher.add_handler(edit_limit_handler)
 dispatcher.add_handler(add_service_handler)
 dispatcher.add_handler(remove_service_handler)
 dispatcher.add_handler(upload_handler)
@@ -48,4 +55,5 @@ dispatcher.add_handler(unknown_handler)
 dispatcher.add_handler(unauthorized_handler)
 
 updater.start_polling()
-# updater.idle()
+print('bot started')
+updater.idle()

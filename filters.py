@@ -1,19 +1,16 @@
 from telegram.ext import UpdateFilter
 
-from db_operations import (
-    is_admin,
-    user_has_auth
-)
+from db_utils import Users
 
 
 class AuthorizedFilter(UpdateFilter):
     def filter(self, update):
         message = update.message or update.edited_message
         user = message.from_user
-        return user_has_auth(user)
+        return Users.is_authorized(user)
 
 
 class AdminFilter(UpdateFilter):
     def filter(self, update):
         user = update.message.from_user
-        return is_admin(user.id)
+        return Users.is_admin(user)

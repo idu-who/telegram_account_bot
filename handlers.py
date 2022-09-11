@@ -2,7 +2,6 @@ import re
 
 from telegram.ext import (
     CommandHandler,
-    ConversationHandler,
     MessageHandler,
     Filters
 )
@@ -11,18 +10,16 @@ from callbacks import (
     start,
     help_menu,
     services,
-    show_usage,
+    usage,
     fetch_credentials,
     unknown,
     unauthorized,
     add_user,
     remove_user,
-    set_limits,
     edit_limit,
     add_service,
     remove_service,
-    upload,
-    cancel
+    upload
 )
 from filters import AuthorizedFilter, AdminFilter
 
@@ -45,19 +42,14 @@ services_handler = CommandHandler(
     services,
     filters=authorized_message_filter
 )
-show_usage_handler = CommandHandler(
-    'showusage',
-    show_usage,
+usage_handler = CommandHandler(
+    'usage',
+    usage,
     filters=authorized_message_filter
 )
 fetch_handler = CommandHandler(
     'fetch',
     fetch_credentials,
-    filters=authorized_message_filter
-)
-cancel_handler = CommandHandler(
-    'cancel',
-    cancel,
     filters=authorized_message_filter
 )
 unknown_handler = MessageHandler(Filters.all & AuthorizedFilter(), unknown)
@@ -74,22 +66,10 @@ remove_user_handler = CommandHandler(
     remove_user,
     filters=admin_message_filter
 )
-set_limits_handler = CommandHandler(
-    'setlimits',
-    set_limits,
-    filters=admin_message_filter
-)
 edit_limit_handler = CommandHandler(
     'editlimit',
     edit_limit,
     filters=admin_message_filter
-)
-set_limits_conversation_handler = ConversationHandler(
-    entry_points=[set_limits_handler],
-    states={
-        0: [edit_limit_handler]
-    },
-    fallbacks=[cancel_handler, unknown_handler]
 )
 add_service_handler = CommandHandler(
     'addservice',

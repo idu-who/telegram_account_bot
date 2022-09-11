@@ -1,167 +1,216 @@
+import logging
+
+from pymongo.errors import DuplicateKeyError
 from telegram import (
     Update,
     ParseMode
 )
-
 from telegram.ext import (
-    CallbackContext,
-    ConversationHandler
+    CallbackContext
 )
 
-import settings
+from db_utils import (
+    Users,
+    Services,
+    Credentials
+)
 
-from db_operations import (
-    is_admin,
-    user_exists_by_telegram_user_id,
-    user_exists_by_username,
-    get_or_create_limit,
-    save_credentials_db,
-    get_or_update_credentials_used
-)
-from mongo_client import client
-from utils import (
-    is_valid_username,
-    is_valid_service_name,
-    readable_service_name,
-    save_credentials_file,
-)
+
+def error_callback(update: Update, context: CallbackContext):
+    """For handling and logging errors."""
+    context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text='Sorry, there was an unexpected error.'
+    )
+
+    message_text = update.message.text or update.message.caption
+    username = update.message.from_user.username
+    error_message = ' - '.join(filter(None, [
+        message_text,
+        f'@{username}' if username else None
+    ]))
+
+    logging.error(
+        error_message,
+        exc_info=context.error,
+        stack_info=False
+    )
 
 
 def start(update: Update, context: CallbackContext):
     """For starting the bot."""
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=(f'Hi {update.message.from_user.full_name}.'
-              '\nUse /help to view all commands.')
+        text=(f'Hi {update.message.from_user.full_name}.\n'
+              'Use /help to view all commands.')
     )
 
 
 def help_menu(update: Update, context: CallbackContext):
     """For showing help menu."""
-    menu_text = ("Here's a list of available commands:\n"
-                 "/help \- view this help menu\.\n"
-                 "/services \- list all services\.\n"
-                 "/showusage \- show service usage and limit\.\n"
-                 "/fetch \<service\> \[\<number\-of\-results\>\] \- fetch "
-                 "credentials for a service\.")
+    commands_list = [
+        ('/help', 'view this help menu'),
+        ('/services', 'list all services'),
+        ('/usage', 'show usage info'),
+        (
+            '/fetch \\<_service_\\> \\[\\<_number\\-of\\-results_\\>\\]',
+            'fetch credentials for a service'
+        )
+    ]
+    commands_list_text = [f'{cmd} \\- {desc}\\.' for cmd, desc
+                          in commands_list]
+    commands_list_text.insert(0, "*Here's a list of available commands:*")
+    response_text = '\n'.join(commands_list_text)
 
-    if is_admin(update.message.from_user.id):
-        menu_text += ("\n\n*Admin Commands:*\n"
-                      "/adduser \<username\> \- add a new user\.\n"
-                      "/removeuser \<username\> \- remove a user\.\n"
-                      "/setlimits \<username\> \- set limits for a user\.\n"
-                      "/addservice \<service\> \- add a new service\.\n"
-                      "/removeservice \<service\> \- remove a service\.\n"
-                      "/upload \<service\> \[\<parser\> \[\<args\>\.\.\.\]\]"
-                      " \- upload a credential file with this command as"
-                      " caption\.")
+    if Users.is_admin(update.message.from_user):
+        commands_list = [
+            ('/adduser \\<_username_\\>', 'add a new user'),
+            ('/removeuser \\<_username_\\>', 'remove a user'),
+            ('/usage \\<_username_\\>', 'show usage info of a user'),
+            (
+                '/editlimit \\<_username_\\> \\<new\\-limit\\>',
+                'edit limit for a user'
+            ),
+            ('/addservice \\<_service_\\>', 'add a new service'),
+            ('/removeservice \\<_service_\\>', 'remove a service'),
+            (
+                '/upload \\<_service_\\>',
+                'upload a credentials file with this command as caption'
+            )
+        ]
+        commands_list_text = [f'{cmd} \\- {desc}\\.' for cmd, desc
+                              in commands_list]
+        commands_list_text.insert(0, "\n\n*Admin Commands:*")
+        response_text += '\n'.join(commands_list_text)
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=menu_text,
+        text=response_text,
         parse_mode=ParseMode.MARKDOWN_V2
     )
 
 
 def services(update: Update, context: CallbackContext):
     """For listing all available services."""
-    service_list_text = '\n'.join([
-        f"{readable_service_name(service):15} \- {service:>15}"
-        for service in settings.Services.get()
+    services_list_text = '\n'.join([
+        f"{Services.readable_service_name(service):15} \\- {service:>15}"
+        for service in Services.get_service_names()
     ])
-    services_text = ("Here's a list of available services:\n"
-                     f"`{service_list_text}`")
+    response_text = ("Here's a list of available services:\n"
+                     f"`{services_list_text}`")
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=services_text,
+        text=response_text,
         parse_mode=ParseMode.MARKDOWN_V2
     )
 
 
-def show_usage(update: Update, context: CallbackContext):
-    """For displaying used and total limits of user."""
+def usage(update: Update, context: CallbackContext):
+    """For checking usage of a user."""
+    response_text = ''
     user = update.message.from_user
-    user_document = user_exists_by_telegram_user_id(user.id)
-    limit_document = get_or_create_limit(user_document)
-    del limit_document['_id']
-    usage_list_text = '\n'.join([
-        f'| {readable_service_name(service):16}|{0:>5} |{quota:>6} |'
-        for service, quota in limit_document.items()
-    ])
-    usage_text = ('`|     Service     | Used | Total |\n'
-                  '----------------------------------\n'
-                  f'{usage_list_text}`')
+    user_document = Users.get_by_telegram_user_id(user.id)
+
+    if user_document['role'] == 'admin':
+        if context.args:
+            username = context.args[0].lower().lstrip('@')
+            if Users.is_valid_username(username):
+                user_document = Users.get_by_username(username)
+                if not user_document:
+                    response_text = (f'User with username @{username} was not'
+                                     ' found.')
+            else:
+                response_text = f'Username @{username} is invalid.'
+
+    if not response_text:
+        response_text = ('Usage info of user @{}.\n'
+                         'Fetched {} credentials out of {} total.')
+        response_text = response_text.format(
+            user_document['username'],
+            user_document['creds_used'],
+            user_document['limit']
+        )
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=usage_text,
-        parse_mode=ParseMode.MARKDOWN_V2
+        text=response_text
     )
 
 
 def fetch_credentials(update: Update, context: CallbackContext):
     """For fetching service credentials."""
-    fetch_creds_response = []
+    response_text = ''
     if context.args:
-        service = context.args[0].lower()
+        service_name = context.args[0].lower()
+        num_fetches = 1
+        service_document = None
 
-        if service in settings.Services.get():
-            fetch_creds_response = [f'{service} is not a service.']
-        if len(context.args) > 1:
-            num_creds = context.args[1]
-            if not(num_creds.isdigit() and int(num_creds) > 0):
-                fetch_creds_response += [f'{num_creds} is not a valid value'
-                                         ' for number of credentials.']
-            else:
-                num_creds = int(num_creds)
+        if Services.is_valid_service_name(service_name):
+            service_document = Services.get_service_by_name(service_name)
+            if not service_document:
+                response_text = (f'Service with name {service_name} was not'
+                                 ' found.')
         else:
-            num_creds = 1
+            response_text = f'Service name {service_name} is invalid.'
 
-        if not fetch_creds_response:
+        if len(context.args) > 1:
+            num_fetches = context.args[1]
+            if not(num_fetches.isdigit() and int(num_fetches) > 0):
+                sep = '\n' if response_text else ''
+                response_text += (f'{sep}{num_fetches} is not a valid number'
+                                  ' of results to fetch.')
+            else:
+                num_fetches = int(num_fetches)
+
+        if not response_text:
             user = update.message.from_user
-            user_document = user_exists_by_telegram_user_id(user.id)
-            credentials_used = get_or_update_credentials_used(user_document)
+            user_document = Users.get_by_telegram_user_id(user.id)
+            creds_used = user_document['creds_used']
+            limit = user_document['limit']
+            new_creds_used_value = creds_used + num_fetches
 
-            if num_creds <= credentials_used[service]:
-                credentials = client.bot.credentials
-                fetched_creds = credentials.find(
-                    {'used_by': None},
-                    limit=num_creds
+            if new_creds_used_value <= limit:
+                fetched_credentials = Credentials.get_unused_credentials(
+                    service_document['_id'],
+                    num_fetches
                 )
-                print('creds', list(fetched_creds))
-
-                credentials.update_many(
-                    {
-                        '_id': {'$in': [
-                            cred['_id'] for cred in fetched_creds
-                        ]}
-                    },
-                    {
-                        '$set': {
-                            'used_by': user_document['_id']
-                        }
-                    }
+                Credentials.set_credentials_used(
+                    fetched_credentials,
+                    user_document['_id']
                 )
-                fetch_creds_response = [
-                    credential['credential_data']
-                    for credential in fetched_creds
+                actual_fetches = len(fetched_credentials)
+                Users.edit_creds_used(
+                    user_document['_id'],
+                    creds_used + actual_fetches
+                )
+                credential_data_list = [
+                    fetched_credential['credential_data']
+                    for fetched_credential in fetched_credentials
                 ]
-
-                users = client.bot.users
-                updated_creds = credentials_used
-                updated_creds[service] -= num_creds
-                users.update_one(
-                    {'_id': user_document['_id']},
-                    {
-                        '$set': {
-                            'credentials_used': updated_creds
-                        }
-                    }
+                response_text = ('Fetched {} credentials for {} service:\n'
+                                 '`{}`')
+                response_text = response_text.format(
+                    actual_fetches,
+                    Services.readable_service_name(service_name),
+                    '\n'.join(credential_data_list)
                 )
+                context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text=response_text,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+                return
+            else:
+                response_text = (f"Can't fetch {num_fetches} credentials."
+                                 ' Request exceeds limit.\n'
+                                 'use /usage to check limit and usage.')
     else:
-        fetch_creds_response = ['/fetch requires a service name.']
+        response_text = '/fetch requires a service name.'
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text='\n'.join(fetch_creds_response)
+        text=response_text
     )
 
 
@@ -169,17 +218,18 @@ def unknown(update: Update, context: CallbackContext):
     """For unknown messages."""
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text='Sorry, I didn\'t understand that.'
+        text="Sorry, I didn't understand that."
     )
 
 
 def unauthorized(update: Update, context: CallbackContext):
     """For unauthorized users."""
-    admin_username = client.bot.users.find_one({'role': 'admin'})['username']
+    admin_username = Users.get_admin()['username']
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=("Sorry, you don't have access to this bot."
-              f"\nContact @{admin_username} to purchase a"
+        text=("Sorry, you don't have access to this bot.\n"
+              f"Contact @{admin_username} to purchase a"
               " subscription.")
     )
 
@@ -187,257 +237,162 @@ def unauthorized(update: Update, context: CallbackContext):
 def add_user(update: Update, context: CallbackContext):
     """For adding a new user."""
     if context.args:
-        username = context.args[0].lstrip('@')
+        username = context.args[0].lower().lstrip('@')
 
-        if is_valid_username(username):
-            if not user_exists_by_username(username):
-                user_document = {
-                    'username': username,
-                    'role': 'reseller'
-                }
-                client.bot.users.insert_one(user_document)
-                add_user_response = f'User @{username} added.'
+        try:
+            insert_result = Users.add_user(username=username)
+            if insert_result:
+                response_text = f'User @{username} added.'
             else:
-                add_user_response = (f'User with username @{username} has'
-                                     ' already been added.')
-        else:
-            add_user_response = f'Username @{username} is invalid.'
+                response_text = f'Username @{username} is invalid.'
+        except DuplicateKeyError:
+            response_text = (f'User with username @{username} has already been'
+                             ' added.')
     else:
-        add_user_response = '/adduser requires a username.'
+        response_text = '/adduser requires a username.'
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=add_user_response
+        text=response_text
     )
 
 
 def remove_user(update: Update, context: CallbackContext):
     """For removing an existing user."""
     if context.args:
-        username = context.args[0].lstrip('@')
+        username = context.args[0].lower().lstrip('@')
 
-        if is_valid_username(username):
-            user_document = user_exists_by_username(username)
-            if user_document:
-                client.bot.users.delete_one({'_id': user_document['_id']})
-                client.bot.limits.delete_one({'_id': user_document['_id']})
-                remove_user_response = f'User @{username} removed.'
+        delete_result = Users.remove_by_username(username)
+        if delete_result:
+            if delete_result.deleted_count != 0:
+                response_text = f'User @{username} removed.'
             else:
-                remove_user_response = (f'User with username @{username} does'
-                                        ' not exists.')
+                response_text = (f'User with username @{username} was not'
+                                 ' found.')
         else:
-            remove_user_response = f'Username @{username} is invalid.'
+            response_text = f'Username @{username} is invalid.'
+
     else:
-        remove_user_response = '/removeuser requires a username.'
+        response_text = '/removeuser requires a username.'
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=remove_user_response
+        text=response_text
     )
-
-
-def set_limits(update: Update, context: CallbackContext):
-    """For setting the limits of a user."""
-    if context.args:
-        username = context.args[0].lstrip('@')
-
-        if is_valid_username(username):
-            user_document = user_exists_by_username(username)
-            if user_document:
-                context.chat_data['user_document'] = user_document
-
-                limit_document = get_or_create_limit(user_document)
-                del limit_document['_id']
-                limit_list_text = '\n'.join([
-                    f'{readable_service_name(service):15} \- {quota:>3}'
-                    for service, quota in limit_document.items()
-                ])
-                set_limits_text = (f"Limits for @{username}:\n\n"
-                                   f'`{limit_list_text}`\n\n'
-                                   'Use /editlimit \<service\> \<new\-limit\>'
-                                   ' to edit limits\.\n'
-                                   'And /services to list all services\.\n'
-                                   'And /cancel to exit /setlimits\.')
-                context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=set_limits_text,
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                return 0
-            else:
-                set_limits_response = (f'User with username @{username} does'
-                                       ' not exists.')
-        else:
-            set_limits_response = f'Username @{username} is invalid.'
-    else:
-        set_limits_response = '/setlimits requires a username.'
-
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=set_limits_response,
-    )
-    return ConversationHandler.END
 
 
 def edit_limit(update: Update, context: CallbackContext):
-    """For editing a limit."""
-    edit_limit_response = []
-
+    """For editing a user's limit."""
+    response_text = ''
     if len(context.args) >= 2:
-        service = context.args[0].lower()
+        username = context.args[0].lower().lstrip('@')
         new_limit = context.args[1]
 
-        if service not in settings.Services.get():
-            edit_limit_response = [f'{service} is not a service.']
+        if not Users.is_valid_username(username):
+            response_text = f'Username @{username} is invalid.'
+
         if not (new_limit.isdigit() and int(new_limit) >= 0):
-            edit_limit_response += [f'{new_limit} is not a valid'
-                                    ' limit value.']
+            sep = '\n' if response_text else ''
+            response_text += f'{sep}{new_limit} is not a valid limit value.'
 
-        if not edit_limit_response:
-            user_document = context.chat_data['user_document']
-            limits = client.bot.limits
-            new_data = {service: int(new_limit)}
-            limits.update_one(
-                {'_id': user_document['_id']},
-                {'$set': new_data}
-            )
-
-            limit_document = limits.find_one({'_id': user_document['_id']})
-            del limit_document['_id']
-            limit_list_text = '\n'.join([
-                f'{readable_service_name(_service):15} \- {quota:>3}*'
-                if _service == service else
-                f'{readable_service_name(_service):15} \- {quota:>3}'
-                for _service, quota in limit_document.items()
-            ])
-            edit_limit_text = (f"Limits for @{user_document['username']}:\n\n"
-                               f'`{limit_list_text}`\n\n'
-                               'Use /editlimit \<service\> \<new\-limit\>'
-                               ' to edit limits\.\n'
-                               'And /services to list all services\.\n'
-                               'And /cancel to exit /setlimits\.')
-            context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=edit_limit_text,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            return 0
+        if not response_text:
+            new_limit = int(new_limit)
+            update_result = Users.edit_limit_by_username(username, new_limit)
+            if update_result.matched_count != 0:
+                response_text = f'Limit updated to {new_limit}.'
+            else:
+                response_text = (f'User with username @{username} was not'
+                                 ' found.')
     else:
-        edit_limit_response = ['/editlimit requires service and new'
-                               ' limit value.']
+        response_text = ('/editlimit requires a username and a new'
+                         ' limit value.')
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text='\n'.join(edit_limit_response)
+        text=response_text
     )
 
 
 def add_service(update: Update, context: CallbackContext):
     """For adding a new service."""
+    # TODO: store parser and required args
     if context.args:
-        service = context.args[0].lower()
+        service_name = context.args[0].lower()
 
-        if is_valid_service_name(service):
-            if service not in settings.Services.get():
-                settings.Services.add(service)
-                limits = client.bot.limits
-                limits.update_many(
-                    {},
-                    {
-                        '$set': {
-                            service: settings.DEFAULT_LIMIT
-                        }
-                    }
-                )
-                add_service_response = f'Service {service} added.'
+        try:
+            insert_result = Services.add_service(service_name)
+            if insert_result:
+                response_text = f'Service {service_name} added.'
             else:
-                add_service_response = (f'Service with name {service} already'
-                                        ' exists.')
-        else:
-            add_service_response += f'{service} is not a valid service name.'
+                response_text = f'Service name {service_name} is invalid.'
+        except DuplicateKeyError:
+            response_text = (f'Service with name {service_name} has already'
+                             ' been added.')
     else:
-        add_service_response = '/addservice requires a service name.'
+        response_text = '/addservice requires a service name.'
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=add_service_response
+        text=response_text
     )
 
 
 def remove_service(update: Update, context: CallbackContext):
     """For removing an existing service."""
     if context.args:
-        service = context.args[0].lower()
+        service_name = context.args[0].lower()
 
-        if is_valid_service_name(service):
-            if service in settings.Services.get():
-                settings.Services.remove(service)
-                limits = client.bot.limits
-                limits.update_many(
-                    {},
-                    {
-                        '$unset': {
-                            service: ''
-                        }
-                    }
-                )
-                remove_service_response = f'Service {service} removed.'
+        delete_result = Services.remove_by_service_name(service_name)
+        if delete_result:
+            if delete_result.deleted_count != 0:
+                response_text = f'Service {service_name} removed.'
             else:
-                remove_service_response = (f'Service with name {service} does'
-                                           ' not exist.')
+                response_text = (f'Service with name {service_name} was not'
+                                 ' found.')
         else:
-            remove_service_response = f'{service} is not a valid service name.'
+            response_text = f'Service name {service_name} is invalid.'
     else:
-        remove_service_response = '/removeservice requires a service name.'
+        response_text = '/removeservice requires a service name.'
 
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=remove_service_response
+        text=response_text
     )
 
 
 def upload(update: Update, context: CallbackContext):
-    """For storing an uploaded file"""
+    """For storing an uploaded document."""
+    # TODO: use service's own parser.
     caption_args = update.message.caption.split(' ')[1:]
     if caption_args:
-        service = caption_args[0].lower()
+        service_name = caption_args[0].lower()
 
-        if len(caption_args) > 1:
-            parser = caption_args[1]
-            parser_args = caption_args[2:]
-        else:
-            parser, parser_args = None, []
-
-        if is_valid_service_name(service):
-            if service in settings.Services.get():
-                file_path = save_credentials_file(
-                    service, update.message.document
+        if Services.is_valid_service_name(service_name):
+            service_document = Services.get_service_by_name(service_name)
+            if service_document:
+                file_path = Credentials.save_credentials_file(
+                    service_name,
+                    update.message.document
                 )
-                try:
-                    save_credentials_db(
-                        service, file_path,
-                        parser, *parser_args
-                    )
-                    upload_response = f'File uploaded for service {service} .'
-                except Exception as e:
-                    upload_response = f'ERROR: {e}'
+                insert_result = Credentials.add_credentials(
+                    service_document['_id'],
+                    file_path
+                )
+                response_text = '{} credentials uploaded for {}.'
+                response_text = response_text.format(
+                    len(insert_result.inserted_ids),
+                    Services.readable_service_name(
+                        service_name)
+                )
             else:
-                upload_response = (f'Service with name {service} does'
-                                   ' not exist.')
+                response_text = (f'Service with name {service_name} was not'
+                                 ' found.')
         else:
-            upload_response = f'{service} is not a valid service name.'
+            response_text = f'Service name {service_name} is invalid.'
     else:
-        upload_response = '/upload requires a service name.'
+        response_text = '/upload requires a service name.'
+
     context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=upload_response
+        text=response_text
     )
-
-
-def cancel(update: Update, context: CallbackContext):
-    context.chat_data.pop('user_document', None)
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text='Process exited.'
-    )
-    return ConversationHandler.END
