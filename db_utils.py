@@ -215,7 +215,7 @@ class Credentials:
             os.mkdir(service_dir)
 
         curr_time_ist = datetime.now(
-            timezone(settings.IST_TIMEZONE)
+            timezone(settings.USER_TIMEZONE)
         ).isoformat()
         file_name = curr_time_ist + '.txt'
         file_path = service_dir / file_name

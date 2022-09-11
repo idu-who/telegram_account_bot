@@ -11,7 +11,7 @@ class TzAwareFormatter(logging.Formatter):
 
     def converter(self, timestamp):
         dt = datetime.fromtimestamp(timestamp, tz=pytz.UTC)
-        local_tz = pytz.timezone(settings.IST_TIMEZONE)
+        local_tz = pytz.timezone(settings.USER_TIMEZONE)
         return dt.astimezone(local_tz)
 
     def formatTime(self, record, datefmt=None):
