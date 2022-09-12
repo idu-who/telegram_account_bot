@@ -39,8 +39,7 @@ file_handler.setFormatter(TzAwareFormatter(
     ' - %(name)s - %(levelname)s - %(message)s'
 ))
 logging.basicConfig(
-    handlers=[file_handler],
-    level=logging.INFO
+    handlers=[file_handler]
 )
 
 dispatcher.add_handler(start_handler)
