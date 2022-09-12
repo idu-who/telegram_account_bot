@@ -148,7 +148,7 @@ class Services:
     @staticmethod
     def is_valid_service_name(service_name):
         """Check if a service name is valid."""
-        return bool(match(r'[a-z\d\-]+$', service_name))
+        return bool(match(r'[a-zA-Z\d\-]+$', service_name))
 
     @staticmethod
     def readable_service_name(service_name):

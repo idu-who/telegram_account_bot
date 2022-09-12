@@ -116,7 +116,7 @@ def usage(update: Update, context: CallbackContext):
 
     if user_document['role'] == 'admin':
         if context.args:
-            username = context.args[0].lower().lstrip('@')
+            username = context.args[0].lstrip('@')
             if Users.is_valid_username(username):
                 user_document = Users.get_by_username(username)
                 if not user_document:
@@ -245,7 +245,7 @@ def unauthorized(update: Update, context: CallbackContext):
 def add_user(update: Update, context: CallbackContext):
     """For adding a new user."""
     if context.args:
-        username = context.args[0].lower().lstrip('@')
+        username = context.args[0].lstrip('@')
 
         try:
             insert_result = Users.add_user(username=username)
@@ -268,7 +268,7 @@ def add_user(update: Update, context: CallbackContext):
 def remove_user(update: Update, context: CallbackContext):
     """For removing an existing user."""
     if context.args:
-        username = context.args[0].lower().lstrip('@')
+        username = context.args[0].lstrip('@')
 
         delete_result = Users.remove_by_username(username)
         if delete_result:
@@ -293,7 +293,7 @@ def edit_limit(update: Update, context: CallbackContext):
     """For editing a user's limit."""
     response_text = ''
     if len(context.args) >= 2:
-        username = context.args[0].lower().lstrip('@')
+        username = context.args[0].lstrip('@')
         new_limit = context.args[1]
 
         if not Users.is_valid_username(username):
