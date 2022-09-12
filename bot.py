@@ -78,6 +78,5 @@ stop_run_continuously = run_schedule.run_continuously()
 
 
 updater.start_polling()
-print('bot started')
 updater.idle()
 stop_run_continuously.set()
