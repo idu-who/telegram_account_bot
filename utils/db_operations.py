@@ -4,7 +4,7 @@ from datetime import datetime
 from pytz import timezone
 from re import match
 
-import credential_parsers
+from utils import parsers
 import settings
 from mongo_client import client
 
@@ -140,12 +140,15 @@ class Services:
     def remove_by_service_name(cls, service_name):
         """Delete a service using service name."""
         if service_name and cls.is_valid_service_name(service_name):
-            return cls.services.delete_one({'name': service_name})
+            service_document = cls.get_service_by_name(service_name)
+            delete_response = cls.services.delete_one({'name': service_name})
+            Credentials.remove_by_service(service_document['_id'])
+            return delete_response
 
     @staticmethod
     def is_valid_service_name(service_name):
         """Check if a service name is valid."""
-        return bool(match(r'[a-z\d\-\+]+$', service_name))
+        return bool(match(r'[a-z\d\-]+$', service_name))
 
     @staticmethod
     def readable_service_name(service_name):
@@ -161,7 +164,7 @@ class Credentials:
     def add_credentials(cls, service_id, file_path, parser='BaseParser',
                         *args):
         """Parse credentials from a file and add them to database."""
-        Parser = getattr(credential_parsers, parser)
+        Parser = getattr(parsers, parser)
         parsed_credentials = []
         with open(file_path) as credentials_file:
             for credential_text in credentials_file:
@@ -203,6 +206,13 @@ class Credentials:
                     }
                 }
             }
+        )
+
+    @classmethod
+    def remove_by_service(cls, service_id):
+        """Deletes all credentials belonging to a service."""
+        return cls.credentials.delete_many(
+            {'service_id': service_id}
         )
 
     @staticmethod

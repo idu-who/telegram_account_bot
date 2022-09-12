@@ -1,6 +1,6 @@
 from telegram.ext import UpdateFilter
 
-from db_utils import Users
+from utils.db_operations import Users
 
 
 class AuthorizedFilter(UpdateFilter):

@@ -10,4 +10,4 @@ DEFAULT_LIMIT = 10
 UPLOAD_PATH = Path('./uploads')
 LOGS_FILE_NAME = 'bot.log'
 USER_TIMEZONE = 'Asia/Kolkata'
-RESET_TIME = (17, 00)  # hour, minutes
+RESET_TIME = '17:00'  # hour, minutes

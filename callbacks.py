@@ -9,7 +9,7 @@ from telegram.ext import (
     CallbackContext
 )
 
-from db_utils import (
+from utils.db_operations import (
     Users,
     Services,
     Credentials
@@ -18,17 +18,19 @@ from db_utils import (
 
 def error_callback(update: Update, context: CallbackContext):
     """For handling and logging errors."""
-    context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text='Sorry, there was an unexpected error.'
-    )
+    error_message = None
+    if update:
+        context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text='Sorry, there was an unexpected error.'
+        )
 
-    message_text = update.message.text or update.message.caption
-    username = update.message.from_user.username
-    error_message = ' - '.join(filter(None, [
-        message_text,
-        f'@{username}' if username else None
-    ]))
+        message_text = update.message.text or update.message.caption
+        username = update.message.from_user.username
+        error_message = ' - '.join(filter(None, [
+            message_text,
+            f'@{username}' if username else None
+        ]))
 
     logging.error(
         error_message,
@@ -175,32 +177,38 @@ def fetch_credentials(update: Update, context: CallbackContext):
                     service_document['_id'],
                     num_fetches
                 )
-                Credentials.set_credentials_used(
-                    fetched_credentials,
-                    user_document['_id']
-                )
                 actual_fetches = len(fetched_credentials)
-                Users.edit_creds_used(
-                    user_document['_id'],
-                    creds_used + actual_fetches
-                )
-                credential_data_list = [
-                    fetched_credential['credential_data']
-                    for fetched_credential in fetched_credentials
-                ]
-                response_text = ('Fetched {} credentials for {} service:\n'
-                                 '`{}`')
-                response_text = response_text.format(
-                    actual_fetches,
-                    Services.readable_service_name(service_name),
-                    '\n'.join(credential_data_list)
-                )
-                context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=response_text,
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                return
+                readable_service_name = Services.readable_service_name(
+                    service_name)
+                if actual_fetches > 0:
+                    Credentials.set_credentials_used(
+                        fetched_credentials,
+                        user_document['_id']
+                    )
+                    Users.edit_creds_used(
+                        user_document['_id'],
+                        creds_used + actual_fetches
+                    )
+                    credential_data_list = [
+                        fetched_credential['credential_data']
+                        for fetched_credential in fetched_credentials
+                    ]
+                    response_text = ('Fetched {} credentials for {} service:\n'
+                                     '`{}`')
+                    response_text = response_text.format(
+                        actual_fetches,
+                        readable_service_name,
+                        '\n'.join(credential_data_list)
+                    )
+                    context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=response_text,
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    return
+                else:
+                    response_text = (f'Sorry, service {readable_service_name}'
+                                     ' is out of stock.')
             else:
                 response_text = (f"Can't fetch {num_fetches} credentials."
                                  ' Request exceeds limit.\n'

@@ -3,13 +3,11 @@ import logging
 import schedule
 
 from telegram.ext import Updater
-from pytz import timezone
 
 import settings
 import run_schedule
 
 from callbacks import error_callback
-from datetime import datetime
 from handlers import (
     start_handler,
     help_handler,
@@ -41,7 +39,8 @@ file_handler.setFormatter(TzAwareFormatter(
     ' - %(name)s - %(levelname)s - %(message)s'
 ))
 logging.basicConfig(
-    handlers=[file_handler]
+    handlers=[file_handler],
+    level=logging.INFO
 )
 
 dispatcher.add_handler(start_handler)
@@ -60,19 +59,6 @@ dispatcher.add_handler(upload_handler)
 dispatcher.add_handler(unknown_handler)
 dispatcher.add_handler(unauthorized_handler)
 
-# convert reset_time from user timezone to system timezone
-reset_hour, reset_minute = settings.RESET_TIME
-system_timezone = datetime.now().replace(
-    hour=reset_hour,
-    minute=reset_minute
-).astimezone().tzinfo
-user_reset_time = datetime.now(timezone(settings.USER_TIMEZONE)).replace(
-    hour=reset_hour,
-    minute=reset_minute
-)
-system_reset_time = user_reset_time.astimezone(system_timezone)
-reset_time_text = system_reset_time.strftime('%H:%M')
-
 
 # cronjob to reset creds_used
 def reset_creds_used():
@@ -87,11 +73,11 @@ def reset_creds_used():
     )
 
 
-schedule.every().day.at(reset_time_text).do(reset_creds_used)
-stop_run_continuously = run_schedule.run_continuously(10)
+schedule.every().day.at(settings.RESET_TIME).do(reset_creds_used)
+stop_run_continuously = run_schedule.run_continuously()
 
 
 updater.start_polling()
 print('bot started')
 updater.idle()
-stop_run_continuously.is_set()
+stop_run_continuously.set()
