@@ -110,7 +110,7 @@ class Users:
     @staticmethod
     def is_valid_username(username):
         """Check if username is valid."""
-        return bool(match(r'[a-z\d_]{5,32}$', username))
+        return bool(match(r'[a-zA-Z\d_]{5,32}$', username))
 
 
 class Services:
