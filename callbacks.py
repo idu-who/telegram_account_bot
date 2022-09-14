@@ -99,7 +99,7 @@ def services(update: Update, context: CallbackContext):
         for service in Services.get_service_names()
     ])
     response_text = ("Here's a list of available services:\n"
-                     f"{'Name':15} \\- {'Command':>15}\n"
+                     "Name                \\-                Command\n"
                      f"`{services_list_text}`")
 
     context.bot.send_message(
