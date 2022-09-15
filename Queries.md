@@ -196,4 +196,4 @@
         }
     }
     ```
-    - This example will include those records where credentials were used between the dates `2022-09-12`(**inclusive**) and `2022-09-15`(**exclusive**). So, all records fetched on _12th, 13th or 14th of September 2022_ will be included.
+    - This example will include those records where credentials were used between the dates `2022-09-12`(**inclusive**) and `2022-09-15`(**exclusive**). So, only records fetched on _12th, 13th or 14th of September 2022_ will be included.
