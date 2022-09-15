@@ -3,7 +3,7 @@
 ## Single result queries
 1. total credentials used
     ```js
-        db.credentials.countDocuments({'used': {'$ne': null}})
+    db.credentials.countDocuments({'used': {'$ne': null}})
     ```
 
 2. total credentials used for a particular service
