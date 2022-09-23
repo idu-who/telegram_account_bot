@@ -1,10 +1,14 @@
 import logging
+import os
+
+from tempfile import TemporaryDirectory
 
 from pymongo.errors import DuplicateKeyError
 from telegram import (
     Update,
     ParseMode
 )
+from telegram.constants import MAX_MESSAGE_LENGTH
 from telegram.ext import (
     CallbackContext
 )
@@ -143,6 +147,36 @@ def usage(update: Update, context: CallbackContext):
     )
 
 
+def send_credentials(context: CallbackContext, chat_id, credential_data_list,
+                     actual_fetches, readable_service_name):
+    """For sending the fetched credentials to user as message or document."""
+    response_text = 'Fetched {} credentials for {} service:\n'
+    response_text = response_text.format(
+        actual_fetches,
+        readable_service_name
+        )
+    credential_data_text = '\n'.join(credential_data_list)
+    if len(response_text) + len(credential_data_text) > MAX_MESSAGE_LENGTH:
+        with TemporaryDirectory() as temp_dir:
+            file_name = os.path.join(temp_dir, 'response_file')
+            with open(file_name, 'w+') as response_file:
+                response_file.write(credential_data_text)
+                response_file.seek(0)
+                context.bot.send_document(
+                    chat_id=chat_id,
+                    document=response_file,
+                    filename=f'{readable_service_name}.txt',
+                    caption=response_text[:-2]
+                )
+    else:
+        response_text += f'`{credential_data_text}`'
+        context.bot.send_message(
+            chat_id=chat_id,
+            text=response_text,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+
 def fetch_credentials(update: Update, context: CallbackContext):
     """For fetching service credentials."""
     response_text = ''
@@ -196,18 +230,9 @@ def fetch_credentials(update: Update, context: CallbackContext):
                         fetched_credential['credential_data']
                         for fetched_credential in fetched_credentials
                     ]
-                    response_text = ('Fetched {} credentials for {} service:\n'
-                                     '`{}`')
-                    response_text = response_text.format(
-                        actual_fetches,
-                        readable_service_name,
-                        '\n'.join(credential_data_list)
-                    )
-                    context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=response_text,
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
+                    send_credentials(context, update.effective_chat.id,
+                                     credential_data_list, actual_fetches,
+                                     readable_service_name)
                     return
                 else:
                     response_text = (f'Sorry, service {readable_service_name}'
